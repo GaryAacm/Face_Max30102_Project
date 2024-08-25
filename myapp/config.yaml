@@ -1,0 +1,19 @@
+server:
+  address: ":8080"
+  model: "debug"
+
+db:
+  dialects: mysql
+  host: 127.0.0.1
+  port: 3306
+  db: sensor_data
+  username: root
+  password: orangepi123 
+  charset: utf8
+  maxIdle: 50
+  maxOpen: 150
+
+
+redis:
+  address: 127.0.0.1:6379
+  password: 123456
