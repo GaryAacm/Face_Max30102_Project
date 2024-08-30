@@ -3,17 +3,15 @@
 MAX30102::MAX30102(const char *device, uint8_t tcaAddress, uint8_t maxAddress)
     : device(device), tcaAddress(tcaAddress), maxAddress(maxAddress)
 {
-    fd = open(device, O_RDWR);
-    if (fd == -1)
-        perror("Failed to open i2c");
-    else if (ioctl(fd, I2C_SLAVE, tcaAddress) < 0)
-    {
-        close(fd);
-        fd = -1;
-    }
-    for (int i = 0; i < 8; i++)
+
+    
+    for (int i = 0; i <= 7; i+=1)
     {
         int ues_channel = 1 << i;
+        fd = open(device, O_RDWR);
+
+        ioctl(fd, I2C_SLAVE, tcaAddress);
+
         if (write(fd, &ues_channel, 1) != 1)
         {
             close(fd);
@@ -35,8 +33,7 @@ MAX30102::MAX30102(const char *device, uint8_t tcaAddress, uint8_t maxAddress)
         {
             max30102_init();
             enable_channels[count_channel++] = i;
-            //fd = open(device, O_RDWR);
-            //ioctl(fd, I2C_SLAVE, tcaAddress);
+
         }
     }
 }
@@ -48,9 +45,7 @@ MAX30102::~MAX30102()
 
 void MAX30102::max30102_init()
 {
-    uint8_t config[2];
     writeRegister(REG_MODE_CONFIG, 0x40);
-    //usleep(50000);
 
     writeRegister(REG_FIFO_WR_PTR, 0x00);
     writeRegister(REG_OVF_COUNTER, 0x00);
@@ -95,21 +90,42 @@ void MAX30102::read_fifo(uint32_t *red_led, uint32_t *ir_led)
     *ir_led = ((reg_data[3] & 0x03) << 16) | (reg_data[4] << 8) | reg_data[5];
 }
 
-bool MAX30102::get_data(uint32_t *red_data,uint32_t *ir_data)
+bool MAX30102::get_data(uint32_t *red_data, uint32_t *ir_data)
 {
     uint32_t red_temp, ir_temp;
+    // int cc = 0;
+    fd = open(device, O_RDWR);
+
+    ioctl(fd, I2C_SLAVE, tcaAddress);
 
     // scanf channel
     while (1)
     {
-        for (int i = 0; i < count_channel; i++)
+        for (int i = 4; i < 7; i+=2)
         {
-            int use_channel = 1 << enable_channels[i];
-            write(fd, &use_channel, 1);
+            int use_channel = 1 << i;
 
-            ioctl(fd, I2C_SLAVE, maxAddress);
+            if (write(fd, &use_channel, 1) != 1)
+            {
+                perror("Failed to select channel");
+                continue;
+            }
+            // fd = open(device, O_RDWR);
+            // if (fd == -1)
+            // {
+            //     perror("Failed to open I2C device");
+            //     return -1;
+            // }
 
-            for (int j = 0; j < 50; j++)
+            if (ioctl(fd, I2C_SLAVE, maxAddress) < 0)
+            {
+                perror("Failed to set I2C address");
+                close(fd);
+                continue;
+            }
+           
+
+            for (int j = 0; j < 20; j++)
             {
                 read_fifo(&red_temp, &ir_temp);
                 printf("channel %d - RED : %d - IR : %d \n", enable_channels[i], red_temp, ir_temp);
@@ -118,4 +134,5 @@ bool MAX30102::get_data(uint32_t *red_data,uint32_t *ir_data)
             }
         }
     }
+    close(fd);
 }

@@ -75,6 +75,7 @@ private:
     uint8_t tcaAddress;
     uint8_t maxAddress;
     int fd;
+    int max30102_fd;
     int enable_channels[8];
     int count_channel=0;
 };
