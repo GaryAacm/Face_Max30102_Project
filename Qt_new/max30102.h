@@ -10,10 +10,10 @@
 #include <errno.h>
 #include <string.h>
 
-#define MAX30102_ADDR 0x57 // MAX30102的I2C地址
-#define TCA9548A_ADDR 0x70 // TCA9548A的I2C地址
+#define MAX30102_ADDR 0x57
+#define TCA9548A_ADDR 0x70
 
-// MAX30102 寄存器地址
+// MAX30102 Register
 #define REG_INTR_STATUS_1 0x00
 #define REG_INTR_STATUS_2 0x01
 #define REG_INTR_ENABLE_1 0x02
@@ -32,29 +32,31 @@
 #define REG_MULTI_LED_CTRL2 0x12
 
 
-class MAX30102{
+class MAX30102
+{
 public:
-    MAX30102(const char *device,uint8_t tcaAddress=TCA9548A_ADDR,uint8_t maxAddress=MAX30102_ADDR);
+    MAX30102(const char *device, uint8_t tcaAddress = TCA9548A_ADDR, uint8_t maxAddress = MAX30102_ADDR);
     ~MAX30102();
 
-    void max30102_init();
-    void writeRegister(uint8_t reg,uint8_t add);
-    
-    void read_fifo(uint32_t *red_led, uint32_t *ir_led, int fd);
-    void DoJob(uint32_t *ir_data, uint32_t *red_data);
-    void PreJob();
-    
+    void max30102_init(int fd);
+    void writeRegister(uint8_t fd, uint8_t reg, uint8_t add);
+
+    void read_fifo(uint32_t *red_led, uint32_t *ir_led,int fd);
+    int init_i2c(const char *device, int addr);
+    void scanf_channel();
+    void init_channel_sensor();
+    void get_middle_data(uint32_t *red_data,uint32_t *ir_data);
+    void get_branch_data(uint32_t red_data[],uint32_t ir_data[]);
 
 private:
     const char *device;
     uint8_t tcaAddress;
     uint8_t maxAddress;
     int fd;
+    int max30102_fd;
     int enable_channels[8];
-    int enable_channel_num = 0;
-    int count_channel = 0;
-    int now_use_channel = 0;
-
+    int count_channel=0;
+    int middle_channels[4]={0,2,4,6};
 };
 
 #endif

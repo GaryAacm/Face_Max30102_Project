@@ -6,13 +6,14 @@
 #include <QSlider>
 #include <QTimer>
 #include <QVector>
-#include<QGestureEvent>
-#include<QPinchGesture>
-#include<QTouchEvent>
-#include<QLabel>
-#include<QDateTime>
-#include<QTimer>
-#include<QPushButton>
+#include <QList>
+#include <QGestureEvent>
+#include <QPinchGesture>
+#include <QTouchEvent>
+#include <QLabel>
+#include <QDateTime>
+#include <QTimer>
+#include <QPushButton>
 #include "max30102.h"
 
 class MainWindow : public QMainWindow
@@ -22,7 +23,6 @@ class MainWindow : public QMainWindow
 public:
     MainWindow(QWidget *parent = nullptr);
     ~MainWindow();
-    
 
 protected:
     bool event(QEvent *event) override;
@@ -39,17 +39,14 @@ private:
     void setupPlot();
     void setupSlider();
     void setupGestures();
-    void StopRun();
-    void BeginRun();
 
-    QCustomPlot *plotTop;   
-    QCustomPlot *plotBottom; 
+    QCustomPlot *plot;
     QSlider *slider;
     QTimer *timer;
     QLabel *logo;
-    QVector<double> redData, irData;
+    QVector<double> redData_middle, irData_middle,red0,red1,red2,red3,ir1,ir2,ir3,ir0;
     QVector<double> xData;
-    
+
     int sampleCount;
     QDateTime startTime;
     int windowSize;
@@ -65,4 +62,3 @@ private:
 };
 
 #endif // MAINWINDOW_H
-
