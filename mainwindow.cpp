@@ -77,40 +77,46 @@ void MainWindow::onExitButtonClicked()
     close();
 }
 
-void MainWindow::BeginRun()
-{
-    timer->start(5);
-}
-
-void MainWindow::StopRun()
-{
-    timer->stop();
-}
-
 void MainWindow::setupPlot()
 {
+    plot->addGraph();
+    plot->graph(0)->setName("Middle_RED");
+    plot->graph(0)->setPen(QPen(Qt::red));
+    plot->graph(0)->setLineStyle(QCPGraph::lsLine);
+    plot->graph(0)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssNone));
 
-    for (int i = 0; i < 10; ++i)
+    plot->addGraph();
+    plot->graph(1)->setName("Middle_IR");
+    plot->graph(1)->setPen(QPen(Qt::green));
+    plot->graph(1)->setLineStyle(QCPGraph::lsLine);
+    plot->graph(1)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssNone));
+
+    QList<QColor> colors = {Qt::gray, Qt::blue, Qt::gray, Qt::blue, Qt::cyan, Qt::darkBlue, Qt::yellow, Qt::darkYellow, Qt::magenta, Qt::darkGreen};
+    for (int i = 2; i < 10; ++i)
     {
         plot->addGraph();
-        QString graphName = (i % 2 == 0) ? QString("Sensor %1 Red").arg(i / 2 + 1) : QString("Sensor %1 IR").arg(i / 2 + 1);
-        plot->graph(i)->setName(graphName);
+        if (i % 2 == 0)
+        {
+            plot->graph(i)->setName(QString("RED_%1").arg(i / 2));
+        }
+        else
+        {
+            plot->graph(i)->setName(QString("IR_%1").arg(i / 2));
+        }
 
-        QPen pen;
-        pen.setColor(QColor::fromHsv((i * 36) % 360, 255, 255)); // 根据HSV色调变化，设置不同颜色
-        plot->graph(i)->setPen(pen);
+        plot->graph(i)->setPen(QPen(colors[i % colors.size()]));
+
         plot->graph(i)->setLineStyle(QCPGraph::lsLine);
         plot->graph(i)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssNone));
-
     }
 
     plot->xAxis->setLabel("Time (s)");
     plot->yAxis->setLabel("Amplitude");
 
     plot->xAxis->setRange(0, windowSize);
-    plot->yAxis->setRange(0, 300000);
+    plot->yAxis->setRange(0, 200000);
 
-    plot->legend->setVisible(false); // 关闭默认图例
+    plot->legend->setVisible(true);
 
     plot->setBackground(Qt::black);
     plot->xAxis->setBasePen(QPen(Qt::white));
@@ -136,11 +142,7 @@ bool MainWindow::event(QEvent *event)
     {
         return gestureEvent(static_cast<QGestureEvent *>(event));
     }
-    else if (event->type() == QEvent::TouchBegin || event->type() == QEvent::TouchUpdate || event->type() == QEvent::TouchEnd)
-    {
-        touchEvent(static_cast<QTouchEvent *>(event));
-        return true;
-    }
+
     return QMainWindow::event(event);
 }
 
@@ -153,35 +155,6 @@ bool MainWindow::gestureEvent(QGestureEvent *event)
     return true;
 }
 
-void MainWindow::touchEvent(QTouchEvent *event)
-{
-    if (event->touchPoints().count() == 1)
-    {
-        QTouchEvent::TouchPoint touchPoint = event->touchPoints().first();
-
-        if (event->type() == QEvent::TouchBegin)
-        {
-            lastTouchPos = touchPoint.pos().toPoint();
-            isTouching = true;
-        }
-        else if (event->type() == QEvent::TouchUpdate && isTouching)
-        {
-            int dx = touchPoint.pos().x() - lastTouchPos.x();
-            double xRangeSize = plot->xAxis->range().size();
-            double xStep = dx * (xRangeSize / plot->width());
-
-            plot->xAxis->moveRange(-xStep);
-
-            lastTouchPos = touchPoint.pos().toPoint();
-            plot->replot();
-        }
-        else if (event->type() == QEvent::TouchEnd)
-        {
-            isTouching = false;
-        }
-    }
-}
-
 void MainWindow::setupSlider()
 {
     slider = new QSlider(Qt::Horizontal, this);
@@ -189,6 +162,39 @@ void MainWindow::setupSlider()
     slider->setEnabled(false);
     slider->setStyleSheet("background-color:white;");
     connect(slider, &QSlider::valueChanged, this, &MainWindow::onSliderMoved);
+    connect(slider, &QSlider::sliderPressed, this, &MainWindow::onSliderPressed);
+    connect(slider, &QSlider::sliderReleased, this, &MainWindow::onSliderReleased);
+    isView = false;
+}
+
+void MainWindow::onSliderPressed()
+{
+    isView = true;
+}
+
+void MainWindow::onSliderReleased()
+{
+    int sliderMax = slider->maximum();
+    int position = slider->value();
+
+    if (position >= sliderMax)
+    {
+        isView = false;
+    }
+    else
+    {
+        isView = true;
+    }
+}
+
+// onSliderMoved() 函数
+void MainWindow::onSliderMoved(int position)
+{
+    if (isView)
+    {
+        plot->xAxis->setRange(position, position + windowSize);
+        plot->replot();
+    }
 }
 
 void MainWindow::pinchTriggered(QPinchGesture *gesture)
@@ -200,56 +206,74 @@ void MainWindow::pinchTriggered(QPinchGesture *gesture)
 
         plot->xAxis->scaleRange(scaleFactor, plot->xAxis->range().center());
         plot->yAxis->scaleRange(scaleFactor, plot->yAxis->range().center());
+
         plot->replot();
     }
 }
 
 void MainWindow::updatePlot()
 {
-    uint32_t red, ir;
-    max30102.get_middle_data(&red, &ir);
-    redData[middle_sensor].append(static_cast<double>(red));
-    irData[middle_sensor].append(static_cast<double>(ir));
 
-    for (int sensorIndex = 1; sensorIndex < 5; ++sensorIndex)
-    {
-        max30102.get_branch_data(&red, &ir);
-        redData[sensorIndex].append(static_cast<double>(red));
-        irData[sensorIndex].append(static_cast<double>(ir));
-    }
+    uint32_t middle_red, middle_ir;
+    uint32_t red[8] = {0}, ir[8] = {0};
+    max30102.get_middle_data(&middle_red, &middle_ir);
 
-    sampleCount++;
+    max30102.get_branch_data(red, ir);
 
     double elapsedTime = startTime.msecsTo(QDateTime::currentDateTime()) / 1000.0;
     xData.append(elapsedTime);
 
-    // 更新10条曲线的数据
-    for (int i = 0; i < 5; ++i)
-    {
-        plot->graph(2 * i)->setData(xData, redData[i]);    // 红光数据
-        plot->graph(2 * i + 1)->setData(xData, irData[i]); // 红外数据
-    }
+    redData_middle.append(static_cast<double>(middle_red));
+    irData_middle.append(static_cast<double>(middle_ir));
+
+    red0.append(static_cast<double>(red[1]));
+    ir0.append(static_cast<double>(ir[1]));
+    red1.append(static_cast<double>(red[3]));
+    ir1.append(static_cast<double>(ir[3]));
+    red2.append(static_cast<double>(red[5]));
+    ir2.append(static_cast<double>(ir[5]));
+    red3.append(static_cast<double>(red[7]));
+    ir3.append(static_cast<double>(ir[7]));
+
+    plot->graph(0)->setData(xData, redData_middle);
+    plot->graph(1)->setData(xData, irData_middle);
+    plot->graph(2)->setData(xData, red0);
+    plot->graph(3)->setData(xData, ir0);
+    plot->graph(4)->setData(xData, red1);
+    plot->graph(5)->setData(xData, ir1);
+    plot->graph(6)->setData(xData, red2);
+    plot->graph(7)->setData(xData, ir2);
+    plot->graph(8)->setData(xData, red3);
+    plot->graph(9)->setData(xData, ir3);
+
+    sampleCount++;
 
     if (elapsedTime <= windowSize)
     {
         plot->xAxis->setRange(0, windowSize);
         slider->setRange(0, windowSize);
+        slider->setEnabled(false);
     }
     else
     {
+        if (!slider->isEnabled())
+        {
+            slider->setEnabled(true);
+        }
+        double maxSliderValue = elapsedTime-windowSize;
+
         if (!slider->isSliderDown())
         {
-            int maxSliderValue = elapsedTime;
-            slider->setRange(0, 10);
-            slider->setValue(maxSliderValue - windowSize);
-        }
-        plot->xAxis->setRange(elapsedTime - windowSize, elapsedTime);
-    }
-    plot->replot();
-}
+            slider->setRange(0, static_cast<int>(elapsedTime-windowSize));
 
-void MainWindow::onSliderMoved(int position)
-{
-    plot->xAxis->setRange(position, position + windowSize);
+            if (!isView)
+            {
+               
+                slider->setValue(static_cast<int>(maxSliderValue));
+                plot->xAxis->setRange(elapsedTime - windowSize, elapsedTime);
+            }
+            plot->xAxis->setRange(elapsedTime - windowSize, elapsedTime);
+        } 
+    }
     plot->replot();
 }
