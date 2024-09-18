@@ -8,8 +8,8 @@
 #include <QDateTime>
 
 MainWindow::MainWindow(QWidget *parent)
-    : QMainWindow(parent), plotTop(new QCustomPlot(this)), plotBottom(new QCustomPlot(this)), logo(new QLabel(this)),
-      sampleCount(0), windowSize(50), isTouching(false)
+    : QMainWindow(parent), plot(new QCustomPlot(this)), logo(new QLabel(this)),
+      sampleCount(0), windowSize(50), isTouching(false), max30102("/dev/i2c-4")
 {
     this->setStyleSheet("background-color:black;");
 
@@ -38,14 +38,10 @@ MainWindow::MainWindow(QWidget *parent)
     button1 = new QPushButton("fun1", this);
     button1->setFixedSize(100, 40);
     button1->setStyleSheet("background-color:white;");
-    // connect(button1, &QPushButton::pressed, this, &MainWindow::StopRun);
-    // connect(button1, &QPushButton::released, this, &MainWindow::BeginRun);
 
     button2 = new QPushButton("fun2", this);
     button2->setFixedSize(100, 40);
     button2->setStyleSheet("background-color:white;");
-    // connect(button2, &QPushButton::pressed, this, &MainWindow::onRightButtonClicked);
-    // connect(button2, &QPushButton::released, this, &MainWindow::onRightButtonReleased);
 
     QHBoxLayout *topLayout = new QHBoxLayout();
     topLayout->addWidget(exitButton);
@@ -56,20 +52,17 @@ MainWindow::MainWindow(QWidget *parent)
     bottomLayout->addWidget(slider);
 
     mainLayout->addWidget(logo, 0);
-    mainLayout->addWidget(plotTop, 1);
-    mainLayout->addWidget(plotBottom, 1);
+    mainLayout->addWidget(plot, 1);
 
     mainLayout->addLayout(topLayout);
     mainLayout->addLayout(bottomLayout, 0);
 
     setCentralWidget(centralWidget);
 
-    channels = {1, 3};
-
     startTime = QDateTime::currentDateTime();
     timer = new QTimer(this);
     connect(timer, &QTimer::timeout, this, &MainWindow::updatePlot);
-    timer->start(5);
+    timer->start(33);
     setAttribute(Qt::WA_AcceptTouchEvents);
 
     showFullScreen();
@@ -84,36 +77,6 @@ void MainWindow::onExitButtonClicked()
     close();
 }
 
-// void MainWindow::onLeftButtonClicked() {
-//     timer->stop();
-//     int position = slider->value();
-//     int step = 1;
-
-//     if (position - step >= 0) {
-//         position -= step;
-//         slider->setValue(position);
-//         plotTop->xAxis->setRange(position, position + windowSize);
-//         plotBottom->xAxis->setRange(position, position + windowSize);
-//         plotTop->replot();
-//         plotBottom->replot();
-//     }
-// }
-
-// void MainWindow::onRightButtonClicked() {
-//     timer->stop();
-//     int position = slider->value();
-//     int step = 1;
-
-//     if (position + step + windowSize <= xData.last()) {
-//         position += step;
-//         slider->setValue(position);
-//         plotTop->xAxis->setRange(position, position + windowSize);
-//         plotBottom->xAxis->setRange(position, position + windowSize);
-//         plotTop->replot();
-//         plotBottom->replot();
-//     }
-// }
-
 void MainWindow::BeginRun()
 {
     timer->start(5);
@@ -126,68 +89,40 @@ void MainWindow::StopRun()
 
 void MainWindow::setupPlot()
 {
-    plotTop->addGraph();
-    plotTop->graph(0)->setName("Red");
-    plotTop->graph(0)->setPen(QPen(Qt::red));
-    plotTop->graph(0)->setLineStyle(QCPGraph::lsLine);
-    plotTop->graph(0)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssNone));
 
-    plotTop->addGraph();
-    plotTop->graph(1)->setName("IR");
-    plotTop->graph(1)->setPen(QPen(Qt::green));
-    plotTop->graph(1)->setLineStyle(QCPGraph::lsLine);
-    plotTop->graph(1)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssNone));
+    for (int i = 0; i < 10; ++i)
+    {
+        plot->addGraph();
+        QString graphName = (i % 2 == 0) ? QString("Sensor %1 Red").arg(i / 2 + 1) : QString("Sensor %1 IR").arg(i / 2 + 1);
+        plot->graph(i)->setName(graphName);
 
-    plotTop->xAxis->setLabel("Time (s)");
-    plotTop->yAxis->setLabel("Amplitude");
+        QPen pen;
+        pen.setColor(QColor::fromHsv((i * 36) % 360, 255, 255)); // 根据HSV色调变化，设置不同颜色
+        plot->graph(i)->setPen(pen);
+        plot->graph(i)->setLineStyle(QCPGraph::lsLine);
+        plot->graph(i)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssNone));
 
-    plotTop->xAxis->setRange(0, windowSize);
-    plotTop->yAxis->setRange(0, 300000);
+    }
 
-    plotTop->legend->setVisible(true);
+    plot->xAxis->setLabel("Time (s)");
+    plot->yAxis->setLabel("Amplitude");
 
-    plotTop->setBackground(Qt::black);
-    plotTop->xAxis->setBasePen(QPen(Qt::white));
-    plotTop->yAxis->setBasePen(QPen(Qt::white));
-    plotTop->xAxis->setTickPen(QPen(Qt::white));
-    plotTop->yAxis->setTickPen(QPen(Qt::white));
-    plotTop->xAxis->setSubTickPen(QPen(Qt::white));
-    plotTop->yAxis->setSubTickPen(QPen(Qt::white));
-    plotTop->xAxis->setLabelColor(Qt::white);
-    plotTop->yAxis->setLabelColor(Qt::white);
-    plotTop->xAxis->setTickLabelColor(Qt::white);
-    plotTop->yAxis->setTickLabelColor(Qt::white);
+    plot->xAxis->setRange(0, windowSize);
+    plot->yAxis->setRange(0, 300000);
 
-    plotBottom->addGraph();
-    plotBottom->graph(0)->setName("Red");
-    plotBottom->graph(0)->setPen(QPen(Qt::red));
-    plotBottom->graph(0)->setLineStyle(QCPGraph::lsLine);
-    plotBottom->graph(0)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssNone));
+    plot->legend->setVisible(false); // 关闭默认图例
 
-    plotBottom->addGraph();
-    plotBottom->graph(1)->setName("IR");
-    plotBottom->graph(1)->setPen(QPen(Qt::green));
-    plotBottom->graph(1)->setLineStyle(QCPGraph::lsLine);
-    plotBottom->graph(1)->setScatterStyle(QCPScatterStyle(QCPScatterStyle::ssNone));
-
-    plotBottom->xAxis->setLabel("Time (s)");
-    plotBottom->yAxis->setLabel("Amplitude");
-
-    plotBottom->xAxis->setRange(0, windowSize);
-    plotBottom->yAxis->setRange(0, 300000);
-
-    plotBottom->legend->setVisible(true);
-    plotBottom->setBackground(Qt::black);
-    plotBottom->xAxis->setBasePen(QPen(Qt::white));
-    plotBottom->yAxis->setBasePen(QPen(Qt::white));
-    plotBottom->xAxis->setTickPen(QPen(Qt::white));
-    plotBottom->yAxis->setTickPen(QPen(Qt::white));
-    plotBottom->xAxis->setSubTickPen(QPen(Qt::white));
-    plotBottom->yAxis->setSubTickPen(QPen(Qt::white));
-    plotBottom->xAxis->setLabelColor(Qt::white);
-    plotBottom->yAxis->setLabelColor(Qt::white);
-    plotBottom->xAxis->setTickLabelColor(Qt::white);
-    plotBottom->yAxis->setTickLabelColor(Qt::white);
+    plot->setBackground(Qt::black);
+    plot->xAxis->setBasePen(QPen(Qt::white));
+    plot->yAxis->setBasePen(QPen(Qt::white));
+    plot->xAxis->setTickPen(QPen(Qt::white));
+    plot->yAxis->setTickPen(QPen(Qt::white));
+    plot->xAxis->setSubTickPen(QPen(Qt::white));
+    plot->yAxis->setSubTickPen(QPen(Qt::white));
+    plot->xAxis->setLabelColor(Qt::white);
+    plot->yAxis->setLabelColor(Qt::white);
+    plot->xAxis->setTickLabelColor(Qt::white);
+    plot->yAxis->setTickLabelColor(Qt::white);
 }
 
 void MainWindow::setupGestures()
@@ -232,15 +167,13 @@ void MainWindow::touchEvent(QTouchEvent *event)
         else if (event->type() == QEvent::TouchUpdate && isTouching)
         {
             int dx = touchPoint.pos().x() - lastTouchPos.x();
-            double xRangeSize = plotTop->xAxis->range().size();
-            double xStep = dx * (xRangeSize / plotTop->width());
+            double xRangeSize = plot->xAxis->range().size();
+            double xStep = dx * (xRangeSize / plot->width());
 
-            plotTop->xAxis->moveRange(-xStep);
-            plotBottom->xAxis->moveRange(-xStep);
+            plot->xAxis->moveRange(-xStep);
 
             lastTouchPos = touchPoint.pos().toPoint();
-            plotTop->replot();
-            plotBottom->replot();
+            plot->replot();
         }
         else if (event->type() == QEvent::TouchEnd)
         {
@@ -265,71 +198,58 @@ void MainWindow::pinchTriggered(QPinchGesture *gesture)
     {
         qreal scaleFactor = gesture->scaleFactor();
 
-        plotTop->xAxis->scaleRange(scaleFactor, plotTop->xAxis->range().center());
-        plotTop->yAxis->scaleRange(scaleFactor, plotTop->yAxis->range().center());
-
-        plotBottom->xAxis->scaleRange(scaleFactor, plotBottom->xAxis->range().center());
-        plotBottom->yAxis->scaleRange(scaleFactor, plotBottom->yAxis->range().center());
-
-        plotTop->replot();
-        plotBottom->replot();
+        plot->xAxis->scaleRange(scaleFactor, plot->xAxis->range().center());
+        plot->yAxis->scaleRange(scaleFactor, plot->yAxis->range().center());
+        plot->replot();
     }
 }
 
 void MainWindow::updatePlot()
 {
     uint32_t red, ir;
-    const char *i2c_device = "/dev/i2c-4";
-    MAX30102 max30102(i2c_device);
-    max30102.PreJob();
+    max30102.get_middle_data(&red, &ir);
+    redData[middle_sensor].append(static_cast<double>(red));
+    irData[middle_sensor].append(static_cast<double>(ir));
 
-    for (int j = 0; j < 30; j++)
+    for (int sensorIndex = 1; sensorIndex < 5; ++sensorIndex)
     {
-        max30102.DoJob(&red, &ir);
-        usleep(5000);
-
-        if (red < 3500 || ir < 3500)
-            continue;
-
-        redData.append(static_cast<double>(red));
-        irData.append(static_cast<double>(ir));
-        sampleCount++;
-
-        double elapsedTime = startTime.msecsTo(QDateTime::currentDateTime()) / 1000.0;
-        xData.append(elapsedTime);
-
-        plotTop->graph(0)->setData(xData, redData);
-        plotTop->graph(1)->setData(xData, irData);
-
-        plotBottom->graph(0)->setData(xData, redData);
-        plotBottom->graph(1)->setData(xData, irData);
-
-        if (elapsedTime <= windowSize)
-        {
-            plotTop->xAxis->setRange(0, windowSize);
-            plotBottom->xAxis->setRange(0, windowSize);
-            slider->setRange(0, windowSize);
-        }
-        else
-        {
-            if (!slider->isSliderDown())
-            {
-                int maxSliderValue = elapsedTime;
-                slider->setRange(0, 10);
-                slider->setValue(maxSliderValue - windowSize);
-            }
-            plotTop->xAxis->setRange(elapsedTime - windowSize, elapsedTime);
-            plotBottom->xAxis->setRange(elapsedTime - windowSize, elapsedTime);
-        }
-        plotTop->replot();
-        plotBottom->replot();
+        max30102.get_branch_data(&red, &ir);
+        redData[sensorIndex].append(static_cast<double>(red));
+        irData[sensorIndex].append(static_cast<double>(ir));
     }
+
+    sampleCount++;
+
+    double elapsedTime = startTime.msecsTo(QDateTime::currentDateTime()) / 1000.0;
+    xData.append(elapsedTime);
+
+    // 更新10条曲线的数据
+    for (int i = 0; i < 5; ++i)
+    {
+        plot->graph(2 * i)->setData(xData, redData[i]);    // 红光数据
+        plot->graph(2 * i + 1)->setData(xData, irData[i]); // 红外数据
+    }
+
+    if (elapsedTime <= windowSize)
+    {
+        plot->xAxis->setRange(0, windowSize);
+        slider->setRange(0, windowSize);
+    }
+    else
+    {
+        if (!slider->isSliderDown())
+        {
+            int maxSliderValue = elapsedTime;
+            slider->setRange(0, 10);
+            slider->setValue(maxSliderValue - windowSize);
+        }
+        plot->xAxis->setRange(elapsedTime - windowSize, elapsedTime);
+    }
+    plot->replot();
 }
 
 void MainWindow::onSliderMoved(int position)
 {
-    plotTop->xAxis->setRange(position, position + windowSize);
-    plotBottom->xAxis->setRange(position, position + windowSize);
-    plotTop->replot();
-    plotBottom->replot();
+    plot->xAxis->setRange(position, position + windowSize);
+    plot->replot();
 }
