@@ -4,6 +4,7 @@
 #include <QWidget>
 #include <QPushButton>
 #include <QPixmap>
+#include "MaxPlot.h"
 
 class MainWindow : public QWidget
 {
@@ -21,13 +22,14 @@ private slots:
     void onStartClicked();
     void onExitClicked();
     void sendExitMessage();
-    void RunMax30102(const std::string& command);
 
 private:
     QPushButton *generateQRButton;
     QPushButton *startButton;
     QPushButton *exitButton;
     QPixmap backgroundPixmap; // 背景图片
+    MaxPlot *maxPlotWindow;
+
 };
 
 #endif // MAINWINDOW_H

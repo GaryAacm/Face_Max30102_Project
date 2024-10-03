@@ -24,20 +24,37 @@ MainWindow::MainWindow(QWidget *parent)
 
     QVBoxLayout *mainLayout = new QVBoxLayout;
 
-    generateQRButton->setFixedSize(200, 50);
-    startButton->setFixedSize(200, 50);
-    exitButton->setFixedSize(200, 50);
+    generateQRButton->setStyleSheet("background:transparent;color:black;border:none;font-weight:bold;font-size:50px;");
+    startButton->setStyleSheet("background:transparent;color:black;border:none;font-weight:bold;font-size:50px;");
+    exitButton->setStyleSheet("background:transparent;color:black;border:none;font-size:50px;");
 
-    // mainLayout->addStretch();
+    maxPlotWindow = nullptr;
 
-    QHBoxLayout *buttonLayout = new QHBoxLayout;
+    generateQRButton->setFixedSize(300, 100);
+    startButton->setFixedSize(300, 100);
+    exitButton->setFixedSize(300, 100);
+
+    QVBoxLayout *buttonLayout = new QVBoxLayout;
     buttonLayout->addWidget(generateQRButton);
+    buttonLayout->addSpacing(50);
     buttonLayout->addWidget(startButton);
+    buttonLayout->addSpacing(50);
     buttonLayout->addWidget(exitButton);
 
-    buttonLayout->setSpacing(20);
-    buttonLayout->setContentsMargins(20, 10, 20, 20);
-    mainLayout->addLayout(buttonLayout);
+    buttonLayout->setContentsMargins(0, 0, 0, 0);
+
+    QWidget *buttonWidget = new QWidget;
+    buttonWidget->setLayout(buttonLayout);
+
+    QHBoxLayout *topLayout = new QHBoxLayout;
+    topLayout->addStretch(5); 
+    topLayout->addWidget(buttonWidget);
+    topLayout->addStretch(2);
+
+
+    mainLayout->addStretch(3);
+    mainLayout->addLayout(topLayout);
+    mainLayout->addStretch(7); 
 
     setLayout(mainLayout);
 
@@ -56,6 +73,10 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow()
 {
+    if (maxPlotWindow)
+    {
+        delete maxPlotWindow;
+    }
 }
 
 void MainWindow::paintEvent(QPaintEvent *event)
@@ -67,7 +88,6 @@ void MainWindow::paintEvent(QPaintEvent *event)
     }
     QWidget::paintEvent(event);
 }
-
 
 size_t WriteCallback(void *contents, size_t size, size_t nmemb, void *userp)
 {
@@ -125,7 +145,6 @@ void MainWindow::sendExitMessage()
     }
 }
 
-
 void MainWindow::onGenerateQRClicked()
 {
     QProcess *pythonProcess = new QProcess(this);
@@ -136,22 +155,27 @@ void MainWindow::onGenerateQRClicked()
     pythonProcess->start("python3", arguments);
 }
 
-void MainWindow::RunMax30102(const std::string &command)
-{
-    int result = system(command.c_str());
-    if (result == 0)
-    {
-        std::cout << "Command executed successfully." << std::endl;
-    }
-    else
-    {
-        std::cerr << "Command execution failed with error code: " << result << std::endl;
-    }
-}
 
 void MainWindow::onStartClicked()
 {
-    RunMax30102("./read_max30102");
+    if (!maxPlotWindow)
+    {
+        maxPlotWindow = new MaxPlot();
+
+        // 连接 MaxPlot 的关闭信号到 MainWindow 的槽函数
+        connect(maxPlotWindow, &MaxPlot::windowClosed, this, [this]()
+                {
+            // 在窗口关闭后，重置指针
+            maxPlotWindow = nullptr; });
+
+        maxPlotWindow->show();
+    }
+    else
+    {
+        maxPlotWindow->show();
+        maxPlotWindow->raise();
+        maxPlotWindow->activateWindow();
+    }
 }
 
 void MainWindow::onExitClicked()

@@ -40,7 +40,7 @@ DISTNAME      = collect1.0.0
 DISTDIR = /home/orangepi/Desktop/collect/.tmp/collect1.0.0
 LINK          = g++
 LFLAGS        = -Wl,-O1
-LIBS          = $(SUBLIBS) -L/lib/aarch64-linux-gnu -lcurl /usr/lib/aarch64-linux-gnu/libQt5PrintSupport.so /usr/lib/aarch64-linux-gnu/libQt5Widgets.so /usr/lib/aarch64-linux-gnu/libQt5Gui.so /usr/lib/aarch64-linux-gnu/libQt5Core.so -lGL -lpthread   
+LIBS          = $(SUBLIBS) -L/lib/aarch64-linux-gnu -lcurl -lpaho-mqtt3c /usr/lib/aarch64-linux-gnu/libQt5PrintSupport.so /usr/lib/aarch64-linux-gnu/libQt5Widgets.so /usr/lib/aarch64-linux-gnu/libQt5Gui.so /usr/lib/aarch64-linux-gnu/libQt5Core.so -lGL -lpthread   
 AR            = ar cqs
 RANLIB        = 
 SED           = sed
@@ -54,13 +54,19 @@ OBJECTS_DIR   = ./
 
 SOURCES       = main.cpp \
 		mainwindow.cpp \
-		qcustomplot.cpp moc_qcustomplot.cpp \
-		moc_mainwindow.cpp
+		qcustomplot.cpp \
+		max30102.cpp \
+		MaxPlot.cpp moc_qcustomplot.cpp \
+		moc_mainwindow.cpp \
+		moc_MaxPlot.cpp
 OBJECTS       = main.o \
 		mainwindow.o \
 		qcustomplot.o \
+		max30102.o \
+		MaxPlot.o \
 		moc_qcustomplot.o \
-		moc_mainwindow.o
+		moc_mainwindow.o \
+		moc_MaxPlot.o
 DIST          = /usr/lib/aarch64-linux-gnu/qt5/mkspecs/features/spec_pre.prf \
 		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/common/unix.conf \
 		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/common/linux.conf \
@@ -138,9 +144,13 @@ DIST          = /usr/lib/aarch64-linux-gnu/qt5/mkspecs/features/spec_pre.prf \
 		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/features/yacc.prf \
 		/usr/lib/aarch64-linux-gnu/qt5/mkspecs/features/lex.prf \
 		collect.pro qcustomplot.h \
-		mainwindow.h main.cpp \
+		mainwindow.h \
+		MaxPlot.h \
+		max30102.h main.cpp \
 		mainwindow.cpp \
-		qcustomplot.cpp
+		qcustomplot.cpp \
+		max30102.cpp \
+		MaxPlot.cpp
 QMAKE_TARGET  = collect
 DESTDIR       = 
 TARGET        = collect
@@ -322,8 +332,8 @@ distdir: FORCE
 	@test -d $(DISTDIR) || mkdir -p $(DISTDIR)
 	$(COPY_FILE) --parents $(DIST) $(DISTDIR)/
 	$(COPY_FILE) --parents /usr/lib/aarch64-linux-gnu/qt5/mkspecs/features/data/dummy.cpp $(DISTDIR)/
-	$(COPY_FILE) --parents qcustomplot.h mainwindow.h $(DISTDIR)/
-	$(COPY_FILE) --parents main.cpp mainwindow.cpp qcustomplot.cpp $(DISTDIR)/
+	$(COPY_FILE) --parents qcustomplot.h mainwindow.h MaxPlot.h max30102.h $(DISTDIR)/
+	$(COPY_FILE) --parents main.cpp mainwindow.cpp qcustomplot.cpp max30102.cpp MaxPlot.cpp $(DISTDIR)/
 
 
 clean: compiler_clean 
@@ -355,18 +365,28 @@ compiler_moc_predefs_clean:
 moc_predefs.h: /usr/lib/aarch64-linux-gnu/qt5/mkspecs/features/data/dummy.cpp
 	g++ -pipe -O2 -std=gnu++11 -Wall -Wextra -dM -E -o moc_predefs.h /usr/lib/aarch64-linux-gnu/qt5/mkspecs/features/data/dummy.cpp
 
-compiler_moc_header_make_all: moc_qcustomplot.cpp moc_mainwindow.cpp
+compiler_moc_header_make_all: moc_qcustomplot.cpp moc_mainwindow.cpp moc_MaxPlot.cpp
 compiler_moc_header_clean:
-	-$(DEL_FILE) moc_qcustomplot.cpp moc_mainwindow.cpp
+	-$(DEL_FILE) moc_qcustomplot.cpp moc_mainwindow.cpp moc_MaxPlot.cpp
 moc_qcustomplot.cpp: qcustomplot.h \
 		moc_predefs.h \
 		/usr/lib/qt5/bin/moc
 	/usr/lib/qt5/bin/moc $(DEFINES) --include /home/orangepi/Desktop/collect/moc_predefs.h -I/usr/lib/aarch64-linux-gnu/qt5/mkspecs/linux-g++ -I/home/orangepi/Desktop/collect -I/usr/include/aarch64-linux-gnu/qt5 -I/usr/include/aarch64-linux-gnu/qt5/QtPrintSupport -I/usr/include/aarch64-linux-gnu/qt5/QtWidgets -I/usr/include/aarch64-linux-gnu/qt5/QtGui -I/usr/include/aarch64-linux-gnu/qt5/QtCore -I/usr/include/c++/11 -I/usr/include/aarch64-linux-gnu/c++/11 -I/usr/include/c++/11/backward -I/usr/lib/gcc/aarch64-linux-gnu/11/include -I/usr/local/include -I/usr/include/aarch64-linux-gnu -I/usr/include qcustomplot.h -o moc_qcustomplot.cpp
 
 moc_mainwindow.cpp: mainwindow.h \
+		MaxPlot.h \
+		qcustomplot.h \
+		max30102.h \
 		moc_predefs.h \
 		/usr/lib/qt5/bin/moc
 	/usr/lib/qt5/bin/moc $(DEFINES) --include /home/orangepi/Desktop/collect/moc_predefs.h -I/usr/lib/aarch64-linux-gnu/qt5/mkspecs/linux-g++ -I/home/orangepi/Desktop/collect -I/usr/include/aarch64-linux-gnu/qt5 -I/usr/include/aarch64-linux-gnu/qt5/QtPrintSupport -I/usr/include/aarch64-linux-gnu/qt5/QtWidgets -I/usr/include/aarch64-linux-gnu/qt5/QtGui -I/usr/include/aarch64-linux-gnu/qt5/QtCore -I/usr/include/c++/11 -I/usr/include/aarch64-linux-gnu/c++/11 -I/usr/include/c++/11/backward -I/usr/lib/gcc/aarch64-linux-gnu/11/include -I/usr/local/include -I/usr/include/aarch64-linux-gnu -I/usr/include mainwindow.h -o moc_mainwindow.cpp
+
+moc_MaxPlot.cpp: MaxPlot.h \
+		qcustomplot.h \
+		max30102.h \
+		moc_predefs.h \
+		/usr/lib/qt5/bin/moc
+	/usr/lib/qt5/bin/moc $(DEFINES) --include /home/orangepi/Desktop/collect/moc_predefs.h -I/usr/lib/aarch64-linux-gnu/qt5/mkspecs/linux-g++ -I/home/orangepi/Desktop/collect -I/usr/include/aarch64-linux-gnu/qt5 -I/usr/include/aarch64-linux-gnu/qt5/QtPrintSupport -I/usr/include/aarch64-linux-gnu/qt5/QtWidgets -I/usr/include/aarch64-linux-gnu/qt5/QtGui -I/usr/include/aarch64-linux-gnu/qt5/QtCore -I/usr/include/c++/11 -I/usr/include/aarch64-linux-gnu/c++/11 -I/usr/include/c++/11/backward -I/usr/lib/gcc/aarch64-linux-gnu/11/include -I/usr/local/include -I/usr/include/aarch64-linux-gnu -I/usr/include MaxPlot.h -o moc_MaxPlot.cpp
 
 compiler_moc_objc_header_make_all:
 compiler_moc_objc_header_clean:
@@ -384,20 +404,37 @@ compiler_clean: compiler_moc_predefs_clean compiler_moc_header_clean
 
 ####### Compile
 
-main.o: main.cpp mainwindow.h
+main.o: main.cpp mainwindow.h \
+		MaxPlot.h \
+		qcustomplot.h \
+		max30102.h
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o main.o main.cpp
 
-mainwindow.o: mainwindow.cpp mainwindow.h
+mainwindow.o: mainwindow.cpp mainwindow.h \
+		MaxPlot.h \
+		qcustomplot.h \
+		max30102.h
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o mainwindow.o mainwindow.cpp
 
 qcustomplot.o: qcustomplot.cpp qcustomplot.h
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o qcustomplot.o qcustomplot.cpp
+
+max30102.o: max30102.cpp max30102.h
+	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o max30102.o max30102.cpp
+
+MaxPlot.o: MaxPlot.cpp MaxPlot.h \
+		qcustomplot.h \
+		max30102.h
+	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o MaxPlot.o MaxPlot.cpp
 
 moc_qcustomplot.o: moc_qcustomplot.cpp 
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o moc_qcustomplot.o moc_qcustomplot.cpp
 
 moc_mainwindow.o: moc_mainwindow.cpp 
 	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o moc_mainwindow.o moc_mainwindow.cpp
+
+moc_MaxPlot.o: moc_MaxPlot.cpp 
+	$(CXX) -c $(CXXFLAGS) $(INCPATH) -o moc_MaxPlot.o moc_MaxPlot.cpp
 
 ####### Install
 

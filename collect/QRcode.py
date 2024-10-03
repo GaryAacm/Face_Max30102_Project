@@ -2,6 +2,26 @@ import qrcode
 from datetime import datetime
 from PIL import Image
 import requests  
+import os
+import random
+import string 
+import urllib.parse
+
+def generate_random_numbers(count):
+    return ''.join(random.choice(string.digits) for _ in range(count))
+
+def generate_random_letters(count):
+    return ''.join(random.choice(string.ascii_letters)for _ in range(count))
+
+def combine_num_letters(num_count,letter_count):
+    numbers = generate_random_numbers(num_count)
+    letters = generate_random_letters(letter_count)
+    combine = numbers + letters
+    combined_list = list(combine)
+    
+    return ''.join(combined_list)
+
+numbers_and_letters = combine_num_letters(3,3)
 
 def get_device_serial():
     try:
@@ -12,24 +32,16 @@ def get_device_serial():
     except Exception as e:
         return "000000000"
 
-current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+current_time = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
 
 device_serial = get_device_serial()
 
-data = f"Device:{device_serial},Time:{current_time}"
+data = f"{device_serial}-{current_time}-{numbers_and_letters}"
 
-
-server_url = 'http://yourserver.com/endpoint'
-params = {'data': data}
-
-#try:
-response = requests.get(server_url, params=params)
-    #if response.status_code == 200:
-        #print("数据成功发送到服务器。")
-    #else:
-        #print(f"服务器返回状态码: {response.status_code}")
-#except requests.exceptions.RequestException as e:
-    #print(f"发送请求时出错: {e}")
+encode_data = urllib.parse.quote(data)
+ 
+param = {"sample_id":data.strip()}
+# param = data.strip()
 
 qr = qrcode.QRCode(
     version=1,  
@@ -38,11 +50,27 @@ qr = qrcode.QRCode(
     border=4,  
 )
 
-qr.add_data(data)
+qr.add_data(param)
 qr.make(fit=True)
 
 img = qr.make_image(fill='black', back_color='white')
 
 img.save("QRcode.png")
 
-img.show()
+os.system(f"feh QRcode.png")
+
+server_url = "http://sp.grifcc.top:8080/collect/register"
+
+
+try:
+    response = requests.get(server_url, params=param,timeout=5)
+    if response.status_code == 200:
+        print("Success connect!")
+    else:
+        print(f"Failed {response.status_code}")
+except requests.exceptions.Timeout:
+    print("Connect timeout!")
+except requests.exceptions.ConnectionError:
+    print("Please check out http")
+
+print(param)
