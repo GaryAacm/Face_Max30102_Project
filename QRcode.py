@@ -1,82 +1,138 @@
-import qrcode
-from datetime import datetime
-from PIL import Image
-import requests  
-import os
 import random
-import string 
-import urllib.parse
+import string
+import requests
+import qrcode
+import subprocess
+import time
+from datetime import datetime
+import os
 
-def generate_random_numbers(count):
-    return ''.join(random.choice(string.digits) for _ in range(count))
+class QRCodeGenerator:
+    def __init__(self):
+        pass
 
-def generate_random_letters(count):
-    return ''.join(random.choice(string.ascii_letters)for _ in range(count))
+    def generate_random_numbers(self, count: int) -> str:
+        numbers = ''.join(random.choices(string.digits, k=count))
+        return numbers
 
-def combine_num_letters(num_count,letter_count):
-    numbers = generate_random_numbers(num_count)
-    letters = generate_random_letters(letter_count)
-    combine = numbers + letters
-    combined_list = list(combine)
-    
-    return ''.join(combined_list)
+    def generate_random_letters(self, count: int) -> str:
+        letters = ''.join(random.choices(string.ascii_uppercase, k=count))
+        return letters
 
-numbers_and_letters = combine_num_letters(3,3)
+    def combine_num_letters(self, num_count: int, letter_count: int) -> str:
+        numbers = self.generate_random_numbers(num_count)
+        letters = self.generate_random_letters(letter_count)
+        combined = numbers + letters
+        combined_list = list(combined)
+        random.shuffle(combined_list)
+        return ''.join(combined_list)
 
-def get_device_serial():
-    try:
-        with open('/proc/cpuinfo','r') as f:
-            for line in f:
-                if line.startswith('Serial'):
-                    return line.strip().split(':')[1]
-    except Exception as e:
+    def get_device_serial(self) -> str:
+        try:
+            with open("/proc/cpuinfo", "r") as cpuinfo:
+                for line in cpuinfo:
+                    if line.startswith("Serial"):
+                        serial = line.split(":")[1].strip()
+                        return serial
+        except FileNotFoundError:
+            pass
         return "000000000"
 
-current_time = datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+    def get_current_time(self) -> str:
+        now = datetime.now()
+        return now.strftime("%Y-%m-%d-%H-%M-%S")
 
-device_serial = get_device_serial()
+    def save_qr_png(self, filename: str, data: str) -> bool:
+        try:
+            qr = qrcode.QRCode(
+                version=1,
+                error_correction=qrcode.constants.ERROR_CORRECT_L,
+                box_size=10,
+                border=4,
+            )
+            qr.add_data(data)
+            qr.make(fit=True)
 
-data = f"{device_serial}-{current_time}-{numbers_and_letters}"
+            img = qr.make_image(fill_color="black", back_color="white")
+            img.save(filename)
+            return True
+        except Exception as e:
+            print(f"Error saving QR code PNG: {e}")
+            return False
 
-encode_data = urllib.parse.quote(data)
+    def open_qr_image(self, filename: str):
+        try:
+            if os.name == 'nt':  # For Windows
+                os.startfile(filename)
+            elif os.name == 'posix':
+                # Attempt to use 'feh', fallback to 'xdg-open'
+                if subprocess.call(['which', 'feh'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) == 0:
+                    subprocess.Popen(['feh', filename])
+                else:
+                    subprocess.Popen(['xdg-open', filename])
+            else:
+                print("Unsupported OS for opening images.")
+        except Exception as e:
+            print(f"Cannot open QR code image: {e}")
 
-param = {"data":data}
+    def generate_and_send_user_message(self) -> str:
+        current_time = self.get_current_time()
+        device_serial = self.get_device_serial()
+        numbers_and_letters = self.combine_num_letters(3, 3)
+        #sample_id = f"{device_serial}-{current_time}-{numbers_and_letters}"
+        sample_id = f"{device_serial}-2024-10-06-14-02-21-E6Z3I8"
 
-qr = qrcode.QRCode(
-    version=1,  
-    error_correction=qrcode.constants.ERROR_CORRECT_L,  
-    box_size=10,  
-    border=4,  
-)
+        send = f"sample_id :{sample_id}"
 
-qr.add_data(data)
-qr.make(fit=True)
+        print(f"Generated sample_id: {sample_id}")
 
-img = qr.make_image(fill='black', back_color='white')
+        qr = qrcode.QRCode(
+        version=1,  
+        error_correction=qrcode.constants.ERROR_CORRECT_L,  
+        box_size=10,  
+        border=4,  
+    )
 
-img.save("QRcode.png")
+        qr.add_data(send)
+        qr.make(fit=True)
 
-os.system(f"feh QRcode.png")
+        img = qr.make_image(fill='black', back_color='white')
 
-server_url = "http://sp.grifcc.top:8080/collect/register"
+        img.save("QRcode.png")
+
+        os.system(f"feh QRcode.png")
 
 
-try:
-    response = requests.get(server_url, params=data.strip(),timeout=5)
-    if response.status_code == 200:
-        print("Success connect!")
-    else:
-        print(f"Failed {response.status_code}")
-except requests.exceptions.Timeout:
-    print("Connect timeout!")
-except requests.exceptions.ConnectionError:
-    print("Please check out http")
-
-print(data)
-    
+        # Send sample_id to server
+        base_url = "http://sp.grifcc.top:8080/collect/get_user"
+        params = {'data': sample_id}
 
 
 
-# img_path = "QRcode.png"
+        try:
+            response = requests.get(base_url, params=params)
+            response.raise_for_status()
+            read_buffer = response.text
+            print("Success in sending message")
+            print(f"服务器返回的数据: {read_buffer}")
+        except requests.RequestException as e:
+            print(f"Failed to send message: {e}")
+            read_buffer = ""
 
-# os.system(f"feh -F {img_path}")
+
+        user_message = f"{read_buffer}-{sample_id}"
+        print(user_message)
+
+        try:
+            with open("User_Message.txt", "w") as f:
+                f.write(user_message)
+        except IOError as e:
+            print(f"Failed to write user message to file: {e}")
+
+        return user_message
+
+if __name__ == "__main__":
+    generator = QRCodeGenerator()
+    user_message = generator.generate_and_send_user_message()
+    print(f"Final User Message: {user_message}")
+
