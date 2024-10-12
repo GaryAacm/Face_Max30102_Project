@@ -13,6 +13,7 @@
 #include <iostream>
 #include <string>
 #include <curl/curl.h>
+using namespace std;
 
 MainWindow::MainWindow(QWidget *parent)
     : QWidget(parent),
@@ -46,19 +47,20 @@ MainWindow::MainWindow(QWidget *parent)
     QWidget *buttonWidget = new QWidget;
     buttonWidget->setLayout(buttonLayout);
 
+    //right and left
     QHBoxLayout *topLayout = new QHBoxLayout;
-    topLayout->addStretch(5); 
+    topLayout->addStretch(11);
     topLayout->addWidget(buttonWidget);
-    topLayout->addStretch(2);
+    topLayout->addStretch(4);
 
-
-    mainLayout->addStretch(3);
+    //up and down
+    mainLayout->addStretch(4);
     mainLayout->addLayout(topLayout);
-    mainLayout->addStretch(7); 
+    mainLayout->addStretch(14);
 
     setLayout(mainLayout);
 
-    QString imagePath = "/home/orangepi/Desktop/zjj/background.png";
+    QString imagePath = "/home/orangepi/Desktop/test/smooth_collect/background.png";
     if (!backgroundPixmap.load(imagePath))
     {
         qDebug() << "无法加载背景图片:" << imagePath;
@@ -97,59 +99,19 @@ size_t WriteCallback(void *contents, size_t size, size_t nmemb, void *userp)
 
 void MainWindow::sendExitMessage()
 {
-    CURL *curl;
-    CURLcode res;
-    std::string readBuffer;
-
-    curl = curl_easy_init();
-    if (curl)
-    {
-        std::string base_url = "http://example.com/api";
-
-        // 要发送的字符串数据
-        std::string data = "Exit";
-
-        char *encoded_data = curl_easy_escape(curl, data.c_str(), data.length());
-        if (encoded_data)
-        {
-            std::string url = base_url + "?data=" + encoded_data;
-
-            curl_free(encoded_data);
-
-            curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
-
-            curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
-            curl_easy_setopt(curl, CURLOPT_WRITEDATA, &readBuffer);
-
-            res = curl_easy_perform(curl);
-
-            if (res != CURLE_OK)
-            {
-                std::cerr << "curl_easy_perform() 失败: " << curl_easy_strerror(res) << std::endl;
-            }
-            else
-            {
-
-                std::cout << "服务器返回的数据: " << readBuffer << std::endl;
-            }
-        }
-        else
-        {
-            std::cerr << "URL 编码失败" << std::endl;
-        }
-        curl_easy_cleanup(curl);
-    }
-    else
-    {
-        std::cerr << "初始化 libcurl 失败" << std::endl;
-    }
+    cout << "Exit out" << endl;
 }
 
 void MainWindow::onGenerateQRClicked()
 {
-    User_Message = qr.generateAndSendUserMessage();
-}
+    //User_Message = qr.generateAndSendUserMessage();
+    QProcess *pythonProcess = new QProcess(this);
+    QString pythonScript = "QRcode.py";
+    QStringList arguments;
+    arguments << pythonScript;
 
+    pythonProcess->start("python3", arguments);
+}
 
 void MainWindow::onStartClicked()
 {
@@ -160,7 +122,6 @@ void MainWindow::onStartClicked()
         // 连接 MaxPlot 的关闭信号到 MainWindow 的槽函数
         connect(maxPlotWindow, &MaxPlot::windowClosed, this, [this]()
                 {
-            // 在窗口关闭后，重置指针
             maxPlotWindow = nullptr; });
 
         maxPlotWindow->show();

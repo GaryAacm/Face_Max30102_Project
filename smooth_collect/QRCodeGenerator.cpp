@@ -1,5 +1,6 @@
 #include "QRCodeGenerator.h"
-#include<cstdio>
+#include <cstdio>
+using namespace std;
 
 QRCodeGenerator::QRCodeGenerator()
 {
@@ -171,7 +172,7 @@ bool QRCodeGenerator::saveQrPng(const char *filename, QRcode *qrcode)
         info_ptr,
         imgSize,
         imgSize,
-        8, 
+        8,
         PNG_COLOR_TYPE_GRAY,
         PNG_INTERLACE_NONE,
         PNG_COMPRESSION_TYPE_DEFAULT,
@@ -226,6 +227,7 @@ std::string QRCodeGenerator::generateAndSendUserMessage()
     if (curl)
     {
         const std::string baseUrl = "http://sp.grifcc.top:8080/collect/get_user";
+        cout << "Success in sending message" << endl;
 
         char *encodedData = curl_easy_escape(curl, sampleId.c_str(), sampleId.length());
         if (encodedData)
@@ -281,9 +283,10 @@ std::string QRCodeGenerator::generateAndSendUserMessage()
 
     // 组合用户消息
     std::string userMessage = readBuffer + "-" + sampleId;
+    cout << userMessage << endl;
 
-    FILE *f = fopen("User_Message.txt","w");
-    fprintf(f,"%s",userMessage);
+    FILE *f = fopen("User_Message.txt", "w");
+    fprintf(f, "%s", userMessage);
     fclose(f);
 
     return userMessage;

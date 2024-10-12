@@ -16,6 +16,9 @@
 #include <QString>
 #include <QByteArray>
 #include <QDebug>
+#include <QJsonObject>
+#include <QJsonDocument>
+#include <chrono>
 
 MAX30102::MAX30102(const char *device, uint8_t tcaAddress, uint8_t maxAddress)
     : device(device), tcaAddress(tcaAddress), maxAddress(maxAddress)
@@ -24,9 +27,9 @@ MAX30102::MAX30102(const char *device, uint8_t tcaAddress, uint8_t maxAddress)
     scanf_channel();
     init_channel_sensor();
 
-    FILE* f = fopen("User_Message.txt","r");
+    FILE *f = fopen("User_Message.txt", "r");
     char buffer[256];
-    while(fgets(buffer,sizeof(buffer),f)!=nullptr)
+    while (fgets(buffer, sizeof(buffer), f) != nullptr)
     {
         Message += buffer;
     }
@@ -39,12 +42,7 @@ MAX30102::MAX30102(const char *device, uint8_t tcaAddress, uint8_t maxAddress)
     mqttWorker = new MQTTWorker(ADDRESS, CLIENTID, TOPIC, QOS, TIMEOUT);
     mqttWorker->moveToThread(mqttThread);
 
-    //connect(mqttThread, &QThread::started, mqttWorker, &MQTTWorker::start);
     connect(this, &MAX30102::sendMQTTMessage, mqttWorker, &MQTTWorker::publishMessage);
-    connect(this, &MAX30102::stopMQTTWorker, mqttWorker, &MQTTWorker::stop);
-    connect(mqttWorker, &MQTTWorker::finished, mqttThread, &QThread::quit);
-    connect(mqttWorker, &MQTTWorker::finished, mqttWorker, &QObject::deleteLater);
-    connect(mqttThread, &QThread::finished, mqttThread, &QObject::deleteLater);
 
     // 启动 MQTT 线程
     mqttThread->start();
@@ -52,9 +50,19 @@ MAX30102::MAX30102(const char *device, uint8_t tcaAddress, uint8_t maxAddress)
 
 MAX30102::~MAX30102()
 {
-    emit stopMQTTWorker();
+}
+
+void MAX30102::Quit()
+{
+    mqttWorker->stop();
+    delete mqttWorker;
+    mqttWorker = nullptr;
+
     mqttThread->quit();
     mqttThread->wait();
+
+    delete mqttThread;
+    mqttThread = nullptr;
 
     close(fd);
 }
@@ -168,25 +176,6 @@ int MAX30102::init_i2c(const char *device, int addr)
     return temp_fd;
 }
 
-void MAX30102::Quit()
-{
-    printf("Close max30102_fd");
-    for (int i = 0; i < enable_channels[i]; i++)
-    {
-        int channel = i;
-        int use = 1 << enable_channels[i];
-        int check = write(fd, &use, 1);
-        if (check != 1)
-            continue;
-        max30102_fd = init_i2c(device, MAX30102_ADDR);
-        writeRegister(max30102_fd, REG_RED_LED, 0x00);
-        writeRegister(max30102_fd, REG_IR_LED, 0x00);
-        printf("Close max30102_fd");
-        close(max30102_fd);
-    }
-    close(fd);
-}
-
 void MAX30102::get_branch_data(uint32_t red_data[], uint32_t ir_data[])
 {
     uint32_t red_temp, ir_temp;
@@ -208,18 +197,18 @@ void MAX30102::get_branch_data(uint32_t red_data[], uint32_t ir_data[])
         }
 
         read_fifo(&red_temp, &ir_temp, max30102_fd);
-        printf("channel %d - RED : %d - IR : %d \n", enable_channels[i], red_temp, ir_temp);
+        // printf("channel %d - RED : %d - IR : %d \n", enable_channels[i], red_temp, ir_temp);
         red_data[enable_channels[i]] = red_temp;
         ir_data[enable_channels[i]] = ir_temp;
 
-        
-        QString payload = QString("%1 Channel : %2, RED: %3, IR: %4")
+        QString payload = QString("%1,reddata:%2,irdata:%3,channel_id:%4")
                               .arg(user_message)
-                              .arg(enable_channels[i])
                               .arg(red_temp)
-                              .arg(ir_temp);
+                              .arg(ir_temp)
+                              .arg(enable_channels[i]);
 
-        // 发送消息到 MQTTWorker
+        //qDebug() << payload;
+
         emit sendMQTTMessage(payload);
 
         close(max30102_fd);
@@ -244,7 +233,7 @@ void MAX30102::get_middle_data(uint32_t *red_data, uint32_t *ir_data)
         }
 
         read_fifo(&red_temp, &ir_temp, max30102_fd);
-        printf("channel %d - RED : %d - IR : %d \n", enable_channels[i], red_temp, ir_temp);
+        // printf("channel %d - RED : %d - IR : %d \n", enable_channels[i], red_temp, ir_temp);
         red_sum += red_temp;
         ir_sum += ir_temp;
         close(max30102_fd);
@@ -252,10 +241,12 @@ void MAX30102::get_middle_data(uint32_t *red_data, uint32_t *ir_data)
     *red_data = red_sum / 4;
     *ir_data = ir_sum / 4;
 
-    QString payload = QString("%1 0 : RED: %2, IR: %3")
+    QString payload = QString("%1,reddata:%2,irdata:%3,channel_id:0")
                           .arg(user_message)
                           .arg(red_temp)
                           .arg(ir_temp);
+
+    //qDebug() << payload;
 
     emit sendMQTTMessage(payload);
 }

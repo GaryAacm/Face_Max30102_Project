@@ -55,7 +55,7 @@ public:
      * @param tcaAddress TCA9548A 多路复用器地址
      * @param maxAddress MAX30102 传感器地址
      */
-    MAX30102(const char *device, uint8_t tcaAddress, uint8_t maxAddress);
+    MAX30102(const char *device, uint8_t tcaAddress = TCA9548A_ADDR, uint8_t maxAddress = MAX30102_ADDR);
 
     ~MAX30102();
 
@@ -79,8 +79,6 @@ public:
 
 signals:
     void sendMQTTMessage(const QString &message);
-
-    void stopMQTTWorker();
 
 private:
     const char *device;

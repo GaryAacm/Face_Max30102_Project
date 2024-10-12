@@ -7,16 +7,20 @@
 #include <QPixmap>
 #include <QDateTime>
 #include <MQTTClient.h>
+#include <iostream>
+#include <QMessageBox>
+#include <QTimer>
+#include <QFuture>
+#include <QFutureWatcher>
+#include <QtConcurrent>
 
+using namespace std;
 
 MaxPlot::MaxPlot(QWidget *parent)
     : QMainWindow(parent), plot(new QCustomPlot(this)), logo(new QLabel(this)),
-      sampleCount(0), windowSize(50), isTouching(false),
-      max30102(nullptr)
+      sampleCount(0), windowSize(50), isTouching(false), max30102("/dev/i2c-4")
 {
     this->setStyleSheet("background-color:black;");
-
-    max30102 = new MAX30102("/dev/i2c-4", TCA9548A_ADDR, MAX30102_ADDR);
 
     QWidget *centralWidget = new QWidget(this);
     centralWidget->setStyleSheet("background-color:black");
@@ -75,13 +79,33 @@ MaxPlot::MaxPlot(QWidget *parent)
 
 MaxPlot::~MaxPlot()
 {
-
-    delete max30102;
 }
 
 void MaxPlot::onExitButtonClicked()
 {
-    close();
+    exitButton->setEnabled(false);
+
+    QMessageBox *msgBox = new QMessageBox(QMessageBox::Information, "Tips", "正在关闭，请稍后", QMessageBox::NoButton, this);
+    msgBox->setStyleSheet("background-color:white; color:black;");
+    msgBox->setWindowFlags(msgBox->windowFlags() | Qt::WindowStaysOnTopHint); 
+    msgBox->show();
+
+    QFuture<void> future = QtConcurrent::run([this]()
+                                             {
+                                                 max30102.Quit(); 
+                                             });
+
+    QFutureWatcher<void> *watcher = new QFutureWatcher<void>(this);
+
+    connect(watcher, &QFutureWatcher<void>::finished, this, [=]()
+            {
+                msgBox->close();
+                close();
+                watcher->deleteLater(); 
+            });
+
+    watcher->setFuture(future);
+
 }
 
 void MaxPlot::setupPlot()
@@ -215,9 +239,9 @@ void MaxPlot::updatePlot()
 
     uint32_t middle_red, middle_ir;
     uint32_t red[8] = {0}, ir[8] = {0};
-    max30102->get_middle_data(&middle_red, &middle_ir);
+    max30102.get_middle_data(&middle_red, &middle_ir);
 
-    max30102->get_branch_data(red, ir);
+    max30102.get_branch_data(red, ir);
 
     double elapsedTime = startTime.msecsTo(QDateTime::currentDateTime()) / 1000.0;
     xData.append(elapsedTime);

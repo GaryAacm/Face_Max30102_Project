@@ -4,15 +4,18 @@
 #include <QObject>
 #include <MQTTClient.h>
 #include <QString>
+#include <QJsonObject>
+#include <QJsonDocument>
 
-class MQTTWorker : public QObject {
+class MQTTWorker : public QObject
+{
     Q_OBJECT
 public:
-    MQTTWorker(const char* address, const char* clientId, const char* topic, int qos, long timeout, QObject* parent = nullptr);
+    MQTTWorker(const char *address, const char *clientId, const char *topic, int qos, long timeout, QObject *parent = nullptr);
     ~MQTTWorker();
 
 public slots:
-    void publishMessage(const QString& message);
+    void publishMessage(const QString &message);
     void stop();
 
 signals:

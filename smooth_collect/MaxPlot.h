@@ -68,7 +68,7 @@ private:
     QPoint lastTouchPos;
     bool isTouching;
     bool isView;
-    MAX30102 *max30102;
+    MAX30102 max30102;
 };
 
 #endif // MAINWINDOW_H

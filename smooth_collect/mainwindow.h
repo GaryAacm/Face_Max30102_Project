@@ -30,7 +30,7 @@ private:
     QPushButton *exitButton;
     QPixmap backgroundPixmap; // 背景图片
     MaxPlot *maxPlotWindow;
-    QRCodeGenerator qr;
+    //QRCodeGenerator qr;
     std::string User_Message;
 
 };
