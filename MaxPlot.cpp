@@ -43,31 +43,112 @@ void MaxPlot::Init_GUI_SHOW()
 {
     Setup_Background();
 
+    setup_timer();
+
     Start_To_Read();
 
     End_All_Test();
 }
 
+void MaxPlot::setup_timer()
+{
+    max30102 = new MAX30102("/dev/i2c-4");
+    max30102->Init_Sensor();
+    struct sigevent sev;
+    sev.sigev_notify = SIGEV_THREAD;
+    sev.sigev_notify_function = posix_timer_handler;
+    sev.sigev_value.sival_ptr = max30102;
+
+    if (timer_create(CLOCK_REALTIME, &sev, &posixTimer) == -1)
+    {
+        std::cerr << "创建 POSIX 定时器失败" << std::endl;
+    }
+    else
+    {
+        std::cout << "POSIX 定时器创建成功" << std::endl;
+    }
+}
+
+void MaxPlot::start_timer()
+{
+    max30102->Init_Sensor();
+    cout << "Init sensor" << endl;
+    struct itimerspec its;
+    its.it_value.tv_sec = 0;
+    its.it_value.tv_nsec = 12500000;
+    its.it_interval.tv_sec = 0;
+    its.it_interval.tv_nsec = 12500000;
+
+    if (timer_settime(posixTimer, 0, &its, NULL) == -1)
+    {
+        std::cerr << "设置 POSIX 定时器失败" << std::endl;
+    }
+    else
+    {
+        std::cout << "POSIX 定时器启动成功" << std::endl;
+    }
+}
+
+void MaxPlot::pause_timer()
+{
+    struct itimerspec its;
+    its.it_value.tv_sec = 0;
+    its.it_value.tv_nsec = 0;
+    its.it_interval.tv_sec = 0;
+    its.it_interval.tv_nsec = 0;
+
+    if (timer_settime(posixTimer, 0, &its, NULL) == -1)
+    {
+        std::cerr << "停止 POSIX 定时器失败" << std::endl;
+    }
+    else
+    {
+        std::cout << "POSIX 定时器已暂停" << std::endl;
+    }
+}
+
+void MaxPlot::posix_timer_handler(union sigval sv)
+{
+    MAX30102 *data = static_cast<MAX30102 *>(sv.sival_ptr);
+    data->get_data();
+    data->datacount++;
+    if (data->datacount >= 160)
+    {
+        cout << "data is up to full" << endl;
+        data->datacount = 0;
+        emit data->finishRead();
+        data->Quit();
+    }
+}
+
 void MaxPlot::Start_To_Read()
 {
     connect(startButton, &QPushButton::clicked, this, &MaxPlot::onStartButtonClicked);
-    connect(this, &MaxPlot::Finish_ALL, this, &MaxPlot::startTimerIfReady);
 }
 
 void MaxPlot::startTimerIfReady()
 {
-    stop_Read_Thread();
-    stop_Plot_Timer();
-    stop_Mqtt_Thread();
-    disconnect(this, &MaxPlot::Finish_ALL, this, &MaxPlot::startTimerIfReady);
 
-    QTimer *timer_start = new QTimer(this);
+    if (!Thread_Running_Plot && !Thread_Running_Mqtt)
+    {
+        cout << "Beginning to stop and begin after 10 s" << endl;
 
-    // Wait 5 minutes to start
-    timer_start->setInterval(300000);
-    timer_start->start();
+        stop_Plot_Timer();
+        stop_Mqtt_Thread();
 
-    connect(timer_start, &QTimer::timeout, this, &MaxPlot::Start_To_Read);
+        cout<<"Now start the control"<<endl;
+
+        QTimer *timer_start = new QTimer(this);
+
+        // Wait 10 s to start
+        timer_start->setInterval(5000);
+        timer_start->start();
+
+        connect(timer_start, &QTimer::timeout, [this, timer_start]()
+                {
+            onStartButtonClicked();
+            timer_start->deleteLater(); });
+    }
 }
 
 void MaxPlot::End_All_Test()
@@ -131,57 +212,57 @@ void MaxPlot::Setup_Background()
 
 void MaxPlot::onStartButtonClicked()
 {
+    redData_middle.clear();
+    irData_middle.clear();
+    red0.clear();
+    red1.clear();
+    red2.clear();
+    red3.clear();
+    ir1.clear();
+    ir2.clear();
+    ir3.clear();
+    ir0.clear();
+    xData.clear();
+
     Read_Data_Thread();
     Update_Plot_Thread();
-    //Mqtt_Thread();
-    //corrupted double-linked list
-    //Aborted (core dumped)
-
+    Mqtt_Thread();
 }
 
 void MaxPlot::Read_Data_Thread()
 {
-    max30102 = new MAX30102("/dev/i2c-4");
-    worker = new MaxDataWorker(nullptr, max30102);
-
-    workerThread = new QThread();
-    worker->moveToThread(workerThread);
-
-    connect(workerThread, &QThread::started, worker, &MaxDataWorker::doWork);
-
     connect(max30102, &MAX30102::dataReady, this, &MaxPlot::handleDataReady);
-    connect(worker, &MaxDataWorker::finishRead, this, &MaxPlot::Http_Worker_Start);
-    connect(workerThread, &QThread::finished, worker, &QObject::deleteLater);
+    connect(max30102, &MAX30102::finishRead, this, &MaxPlot::Http_Worker_Start);
+    connect(max30102, &MAX30102::finishRead, this, &MaxPlot::pause_timer);
 
     qRegisterMetaType<MaxData>("MaxData");
 
-    workerThread->start();
+    start_timer();
 }
 
 void MaxPlot::stop_Read_Thread()
 {
-    // To Do
-    max30102->Quit();
-    if (!max30102)
-        delete max30102;
 
     workerThread->quit();
     workerThread->wait();
 
     if (!workerThread)
         delete workerThread;
+    workerThread = nullptr;
 }
 
 void MaxPlot::Update_Plot_Thread()
 {
-
-    connect(max30102, &MAX30102::dataReady, this, &MaxPlot::updatePlot);
-
-    connect(timerThread, &QThread::finished, timer, &QObject::deleteLater);
+    Thread_Running_Plot = true;
+    timer = new QTimer(this);
+    connect(timer, &QTimer::timeout, this, &MaxPlot::updatePlot);
+    timer->start(33);
 }
 
 void MaxPlot::Mqtt_Thread()
 {
+    Thread_Running_Mqtt = true;
+    Mqtt_timer = new QTimer();
     mqttThread = new QThread();
     mqttWorker = new MQTTWorker(ADDRESS, CLIENTID, TOPIC, QOS, TIMEOUT);
     mqttWorker->moveToThread(mqttThread);
@@ -189,11 +270,10 @@ void MaxPlot::Mqtt_Thread()
     connect(this, &MaxPlot::sendMQTTMessage, mqttWorker, &MQTTWorker::publishMessage);
     mqttThread->start();
 
-    connect(max30102, &MAX30102::dataReady, this, &MaxPlot::Get_Mqtt_Message);
-    // QObject::connect(QThread, Unknown) : invalid nullptr parameter
-    //                                          Start to Plot
-    //                                              MQTT READY
-    //                                                  datacount is : 399
+    Mqtt_timer->setInterval(33);
+    connect(Mqtt_timer, &QTimer::timeout, this, &MaxPlot::Get_Mqtt_Message);
+
+    Mqtt_timer->start();
 }
 
 void MaxPlot::stop_Plot_Timer()
@@ -201,12 +281,8 @@ void MaxPlot::stop_Plot_Timer()
     if (timer && timer->isActive())
     {
         timer->stop();
+        cout << "Already stop plot timer" << endl;
     }
-
-    timerThread->quit();
-    timerThread->wait();
-    if (!timerThread)
-        delete timerThread;
 }
 
 void MaxPlot::stop_Mqtt_Thread()
@@ -216,8 +292,11 @@ void MaxPlot::stop_Mqtt_Thread()
         Mqtt_timer->stop();
     }
 
-    mqttWorker->stop();
-    delete mqttWorker;
+    if (mqttWorker)
+    {
+        mqttWorker->stop();
+        delete mqttWorker;
+    }
 
     mqttThread->quit();
     mqttThread->wait();
@@ -225,12 +304,41 @@ void MaxPlot::stop_Mqtt_Thread()
         delete mqttThread;
 }
 
+void MaxPlot::onMqttFinished()
+{
+    Thread_Running_Mqtt = false;
+    for (int i = 0; i < 8; i++)
+    {
+        while (!Queue_Mqtt_Red[i].empty())
+            Queue_Mqtt_Red[i].pop();
+
+        while (!Queue_Mqtt_IR[i].empty())
+            Queue_Mqtt_IR[i].pop();
+    }
+    startTimerIfReady();
+}
+
+void MaxPlot::onPlotFinished()
+{
+    Thread_Running_Plot = false;
+    for (int i = 0; i < 8; i++)
+    {
+        while (!Queue_Plot_Red[i].empty())
+            Queue_Plot_Red[i].pop();
+
+        while (!Queue_Plot_IR[i].empty())
+            Queue_Plot_IR[i].pop();
+    }
+
+    startTimerIfReady();
+}
+
 void Send_Message(const std::string &Start_Unix, const int *Channel_ID, const int *Red_Data, const int *IR_Data, const std::string &sample_id, const std::string &uuid, const int fre)
 {
     CURL *curl = curl_easy_init();
     if (curl)
     {
-        int Data_Size = 45 * 800;
+        int Data_Size = 45 * 1000;
         json jsonData;
         jsonData["Start_Unix"] = Start_Unix;
 
@@ -294,21 +402,24 @@ void MaxPlot::Http_Worker_Start()
     std::thread sendThread(Send_Message, Start_string, channel_send_id, red_send_data, ir_send_data, sample_id, uuid, 100);
     sendThread.detach();
     curl_global_cleanup();
+
+    onMqttFinished();
+    onPlotFinished();
+    count_data = 0;
 }
 
 void MaxPlot::Get_Mqtt_Message()
 {
     // To do ke cha jie
-    cout << "MQTT READY" << endl;
     uint32_t red_temp[8] = {0}, ir_temp[8] = {0}, channel_temp[8] = {0};
 
     for (int i = 0; i < 8; i++)
     {
-        red_temp[i] = Queue_Mqtt[i].front();
-        Queue_Mqtt[i].pop();
+        if (Queue_Mqtt_Red[i].size() == 0 || Queue_Mqtt_IR[i].size() == 0)
+            continue;
+        red_temp[i] = Queue_Mqtt_Red[i].back();
 
-        ir_temp[i] = Queue_Mqtt[i].front();
-        Queue_Mqtt[i].pop();
+        ir_temp[i] = Queue_Mqtt_IR[i].back();
         channel_temp[i] = i;
     }
 
@@ -335,72 +446,31 @@ void MaxPlot::Get_Mqtt_Message()
 
     emit sendMQTTMessage(payload);
 
-    if (Queue_Mqtt[7].size() == 0)
-        emit Finish_ALL();
-
     //{"channel":[0,1,2,3,4,5,6,7],"ir":[10,20,30,40,50,60,70,80],"red":[15,25,35,45,55,65,75,85]}
 }
 
 void MaxPlot::onExitButtonClicked()
 {
     exitButton->setEnabled(false);
-
-    if (timer->isActive())
-    {
-        timer->stop();
-    }
-    if (Mqtt_timer && Mqtt_timer->isActive())
-    {
-        Mqtt_timer->stop();
-    }
-
-    stop_Read_Thread();
-    stop_Plot_Timer();
-    stop_Mqtt_Thread();
-
     close();
 }
 
 void MaxPlot::handleDataReady(const MaxData &data)
 {
+    // cout<<"Deal data"<<endl;
     uint32_t temp_red = 0, temp_ir = 0;
     for (int i = 0; i < 8; i++)
     {
-        Queue_Mqtt[i].push(data.redData[i]);
-        Queue_Mqtt[i].push(data.irData[i]);
+        Queue_Mqtt_Red[i].push(data.redData[i]);
+        Queue_Mqtt_IR[i].push(data.irData[i]);
+
+        Queue_Plot_Red[i].push(data.redData[i]);
+        Queue_Plot_IR[i].push(data.irData[i]);
 
         channel_send_id[count_data] = i;
         red_send_data[count_data] = data.redData[i];
         red_send_data[count_data++] = data.irData[i];
-        if (i == 0 || i == 2 || i == 4 || i == 6)
-        {
-            temp_red += data.redData[i];
-            temp_ir += data.irData[i];
-        }
     }
-
-    temp_red /= 4;
-    temp_ir /= 4;
-    // cout<<temp_red<<" "<<temp_ir<<endl;
-    cout<<"receiving data"<<endl;
-
-    redData_middle.append(static_cast<double>(temp_red));
-    irData_middle.append(static_cast<double>(temp_ir));
-
-    red0.append(static_cast<double>(data.redData[1]));
-    ir0.append(static_cast<double>(data.irData[1]));
-
-    red1.append(static_cast<double>(data.redData[3]));
-    ir1.append(static_cast<double>(data.irData[3]));
-
-    red2.append(static_cast<double>(data.redData[5]));
-    ir2.append(static_cast<double>(data.irData[5]));
-
-    red3.append(static_cast<double>(data.redData[7]));
-    ir3.append(static_cast<double>(data.irData[7]));
-
-    double elapsedTime = startTime.msecsTo(QDateTime::currentDateTime()) / 1000.0;
-    xData.append(elapsedTime);
 }
 
 void MaxPlot::setupPlot()
@@ -440,7 +510,7 @@ void MaxPlot::setupPlot()
     plot->yAxis->setLabel("Amplitude");
 
     plot->xAxis->setRange(0, windowSize);
-    plot->yAxis->setRange(0, 500000);
+    plot->yAxis->setRange(0, 200000);
 
     plot->legend->setVisible(true);
 
@@ -528,10 +598,71 @@ void MaxPlot::pinchTriggered(QPinchGesture *gesture)
     }
 }
 
+double MaxPlot::Pre_Plot_data()
+{
+    uint32_t temp_red = 0, temp_ir = 0, mean_count = 0;
+    uint32_t reddata[8], irdata[8], red = 0, ir = 0, reddata_past[8] = {0}, irdata_past[8] = {0};
+
+    double elapsedTime = startTime.msecsTo(QDateTime::currentDateTime()) / 1000.0;
+    countPlot++;
+
+    for (int i = 0; i < 8; i++)
+    {
+        if (Queue_Plot_Red[i].size() == 0 || Queue_Plot_IR[i].size() == 0)
+            continue;
+
+        red = Queue_Plot_Red[i].back();
+
+        ir = Queue_Plot_IR[i].back();
+
+        if (red < 200000 && ir < 200000)
+        {
+            reddata_past[i] = red;
+            irdata_past[i] = ir;
+        }
+        else if (red > 200000 || ir > 200000 || red < 0 || ir < 0)
+        {
+            red = reddata_past[i];
+            ir = irdata_past[i];
+        }
+
+        if (i == 1 || i == 3 || i == 5 || i == 7)
+        {
+            temp_red += red;
+            temp_ir += ir;
+            mean_count++;
+        }
+        else
+        {
+            reddata[i] = red;
+            irdata[i] = ir;
+        }
+    }
+    temp_red /= mean_count;
+    temp_ir /= mean_count;
+
+    redData_middle.append(static_cast<double>(temp_red));
+    irData_middle.append(static_cast<double>(temp_ir));
+
+    red0.append(static_cast<double>(reddata[0]));
+    ir0.append(static_cast<double>(irdata[0]));
+
+    red1.append(static_cast<double>(reddata[2]));
+    ir1.append(static_cast<double>(irdata[2]));
+
+    red2.append(static_cast<double>(reddata[4]));
+    ir2.append(static_cast<double>(irdata[4]));
+
+    red3.append(static_cast<double>(reddata[6]));
+    ir3.append(static_cast<double>(irdata[6]));
+    xData.append(elapsedTime);
+    // cout<<temp_red<<" "<<temp_ir<<" "<<reddata[1]<<' '<<irdata[1]<<' '<<reddata[3]<<' '<<irdata[3]<<' '<<reddata[5]<<" "<<irdata[5]<<' '<<reddata[7]<<' '<<irdata[7]<<endl;
+    return elapsedTime;
+}
+
 void MaxPlot::updatePlot()
 {
-    cout << "Start to Plot" << endl;
-    double elapsedTime = startTime.msecsTo(QDateTime::currentDateTime()) / 1000.0;
+    double elapsedTime = Pre_Plot_data();
 
     plot->graph(0)->setData(xData, redData_middle);
     plot->graph(1)->setData(xData, irData_middle);
